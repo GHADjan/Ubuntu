@@ -1,60 +1,48 @@
-from database.models import User, Password
+from database.models import Service, Transaction, Card
 from database import get_db
 
 
-
-# Регистрация пользователя
-def register_user_db(**kwargs):
+# Сделать перевод с карты на карту
+def transfer_money_db(card_from, card_to, amount, date):
     db = next(get_db())
-    phone_number = kwargs.get('phone_number')
-
-    # Проверка номера
-    checker = db.query(User).filter_by(phone_number=phone_number)
-
-    if checker:
-        return 'Пользователь с таким номером уже есть в базе'
-
-    # Если нет пользователя в базе, то регистрация
-    new_user = User(**kwargs)
-    db.add(new_user)
-    db.commit()
-
-    # Создать пароль
-    new_user_password = Password(user_id=new_user.user_id, **kwargs)
-    db.add(new_user_password)
-    db.commit()
-
-    return 'Пользователь успешно добавлен в базу'
+    card_from_checker = get_exact_card_balance_db(card_from)
+    card_to_checker = get_exact_card_balance_db(card_to)
+    if (card_from_checker and card_to_checker) and (card_from_checker.balance >= amount):
+        transaction = Transaction(card_to=card_to,
+                                  card_id=card_from_checker.card_id,
+                                  amount=amount)
+        card_from_checker.balance -= amount
+        card_to_checker.balance += amount
+        db.add(transaction)
+        db.commit()
+        return "perevod uspewno vipolnen"
+    elif not card_to_checker or not card_from_checker:
+        return "owibka v dannix"
+    else:
+        return "nedostatochno sredstv"
 
 
-# Проверка пароля
-def check_password_db(phone_number, password):
+def pay_for_service_db(business_id: int, from_card: int, amount: float ):
     db = next(get_db())
-    checker = db.query(Password).filter_by(phone_number).first()
+    checker = get_exact_card_balance_db(from_card)
+    if checker and checker.balance >= amount:
+        transaction = Transaction(card_to=business_id,
+                                  card_id=from_card,
+                                  amount=amount)
+        checker.balance -= amount
 
-    if checker and checker.password == password:
-        return checker.user_id
-
+        db.add(transaction)
+        db.commit()
+        return "Услуга успешно оплачена"
     elif not checker:
-        return 'Ошибка в номере'
+        return "ошибка в данных"
+    else:
+        return "недостаточно средств"
 
-    elif checker.password != password:
-        return 'Something get wrong'
 
-# Получение информации пользователя
-def get_user_cabinet(user_id):
+def get_exact_card_balance_db(card_number):
     db = next(get_db())
-    checker = db.query(User).filter_by(user_id=user_id).first()
+    exact_card = db.query(Card).filter_by(card_number=card_number).first()
 
-    if checker:
-        return checker
-
-    return 'Ошибка данных'
-
-
-
-
-
-
-
+    return exact_card
 
